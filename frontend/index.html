@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Emergency Fundraiser</title>
+    <script src="https://cdn.jsdelivr.net/npm/web3@1.6.1/dist/web3.min.js"></script>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        margin: 20px;
+        text-align: center;
+      }
+      input,
+      button {
+        padding: 10px;
+        margin: 10px;
+        width: 80%;
+        max-width: 400px;
+      }
+      #status {
+        margin-top: 20px;
+        font-weight: bold;
+        color: green;
+      }
+      #donationStatus {
+        margin-top: 20px;
+        font-weight: bold;
+        color: red;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Emergency Fundraiser</h1>
+
+    <div>
+      <button id="connectButton">Connect MetaMask</button>
+      <p id="account"></p>
+    </div>
+
+    <h3>Donate to the Fundraiser</h3>
+    <input
+      type="number"
+      id="donationAmount"
+      placeholder="Donation Amount (in ETH)"
+    /><br />
+    <button id="donateButton">Donate</button>
+
+    <h3>Fundraiser Details</h3>
+    <p>Goal: <span id="goalAmount"></span> ETH</p>
+    <p>Total Raised: <span id="totalRaised"></span> ETH</p>
+    <p>Deadline: <span id="deadline"></span></p>
+    <p id="status"></p>
+
+    <h3>Fundraiser Owner Actions</h3>
+    <button id="withdrawButton">Withdraw Funds (Owner Only)</button>
+    <p id="donationStatus"></p>
+
+    <script>
+      let web3;
+      let contract;
+      let account;
+      const contractAddress = "YOUR_CONTRACT_ADDRESS"; // Replace with your contract address
+      const contractABI = [
+        // ABI for EmergencyFundraiser contract
+        {
+          inputs: [
+            { internalType: "uint256", name: "_goalAmount", type: "uint256" },
+            {
+              internalType: "uint256",
+              name: "_durationInDays",
+              type: "uint256",
+            },
+          ],
+          name: "constructor",
+          outputs: [],
+          stateMutability: "nonpayable",
+          type: "constructor",
+        },
+        {
+          inputs: [],
+          name: "donate",
+          outputs: [],
+          stateMutability: "payable",
+          type: "function",
+        },
+        {
+          inputs: [],
+          name: "withdrawFunds",
+          outputs: [],
+          stateMutability: "nonpayable",
+          type: "function",
+        },
+        {
+          inputs: [],
+          name: "goalAmount",
+          outputs: [{ internalType: "uint256", name: "", type: "uint256" }],
+          stateMutability: "view",
+          type: "function",
+        },
+        {
+          inputs: [],
+          name: "totalRaised",
+          outputs: [{ internalType: "uint256", name: "", type: "uint256" }],
+          stateMutability: "view",
+          type: "function",
+        },
+        {
+          inputs: [],
+          name: "deadline",
+          outputs: [{ internalType: "uint256", name: "", type: "uint256" }],
+          stateMutability: "view",
+          type: "function",
+        },
+        {
+          inputs: [],
+          name: "goalMet",
+          outputs: [{ internalType: "bool", name: "", type: "bool" }],
+          stateMutability: "view",
+          type: "function",
+        },
+        {
+          inputs: [],
+          name: "fundsWithdrawn",
+          outputs: [{ internalType: "bool", name: "", type: "bool" }],
+          stateMutability: "view",
+          type: "function",
+        },
+      ];
+
+      window.addEventListener("load", async () => {
+        if (window.ethereum) {
+          web3 = new Web3(window.ethereum);
+          try {
+            await ethereum.request({ method: "eth_requestAccounts" });
+            account = (await web3.eth.getAccounts())[0];
+            document.getElementById(
+              "account"
+            ).innerText = `Connected Account: ${account}`;
+            contract = new web3.eth.Contract(contractABI, contractAddress);
+            loadFundraiserDetails();
+          } catch (error) {
+            console.error("Error connecting MetaMask:", error);
+          }
+        } else {
+          alert("Please install MetaMask to use this feature.");
+        }
+      });
+
+      // Connect MetaMask
+      document
+        .getElementById("connectButton")
+        .addEventListener("click", async () => {
+          if (window.ethereum) {
+            await ethereum.request({ method: "eth_requestAccounts" });
+            account = (await web3.eth.getAccounts())[0];
+            document.getElementById(
+              "account"
+            ).innerText = `Connected Account: ${account}`;
+          } else {
+            alert("Please install MetaMask to connect.");
+          }
+        });
+
+      // Donate function
+      document
+        .getElementById("donateButton")
+        .addEventListener("click", async () => {
+          const donationAmount =
+            document.getElementById("donationAmount").value;
+          const amountInWei = web3.utils.toWei(donationAmount, "ether");
+
+          if (!donationAmount || donationAmount <= 0) {
+            alert("Please enter a valid donation amount.");
+            return;
+          }
+
+          try {
+            await contract.methods.donate().send({
+              from: account,
+              value: amountInWei,
+            });
+            loadFundraiserDetails();
+          } catch (error) {
+            console.error("Error donating:", error);
+          }
+        });
+
+      // Withdraw funds function (owner only)
+      document
+        .getElementById("withdrawButton")
+        .addEventListener("click", async () => {
+          try {
+            await contract.methods.withdrawFunds().send({
+              from: account,
+            });
+            document.getElementById("donationStatus").innerText =
+              "Funds successfully withdrawn!";
+            loadFundraiserDetails();
+          } catch (error) {
+            console.error("Error withdrawing funds:", error);
+            document.getElementById("donationStatus").innerText =
+              "Error: Only the owner can withdraw funds.";
+          }
+        });
+
+      // Load fundraiser details
+      async function loadFundraiserDetails() {
+        try {
+          const goalAmount = await contract.methods.goalAmount().call();
+          const totalRaised = await contract.methods.totalRaised().call();
+          const deadline = await contract.methods.deadline().call();
+          const goalMet = await contract.methods.goalMet().call();
+          const fundsWithdrawn = await contract.methods.fundsWithdrawn().call();
+
+          document.getElementById("goalAmount").innerText = web3.utils.fromWei(
+            goalAmount,
+            "ether"
+          );
+          document.getElementById("totalRaised").innerText = web3.utils.fromWei(
+            totalRaised,
+            "ether"
+          );
+          document.getElementById("deadline").innerText = new Date(
+            deadline * 1000
+          ).toLocaleString();
+
+          if (goalMet) {
+            document.getElementById("status").innerText = "Goal met!";
+          } else {
+            document.getElementById("status").innerText = "Goal not met yet.";
+          }
+
+          if (fundsWithdrawn) {
+            document.getElementById("donationStatus").innerText =
+              "Funds have already been withdrawn.";
+          } else {
+            document.getElementById("donationStatus").innerText = "";
+          }
+        } catch (error) {
+          console.error("Error loading fundraiser details:", error);
+        }
+      }
+    </script>
+  </body>
+</html>
